@@ -1,0 +1,48 @@
+environments:
+  dev:
+    dev_environment: true
+    aws: dso-dev02
+
+aws:
+  accounts:
+    dso-dev02:
+      account_id: "857742961209"
+      region: eu-central-1
+      iam_roles:
+        deployment_role:
+          iam_policies:
+            - deployment_policy_1
+          refs:
+            - ref:refs/heads/main
+            - pull_request
+  iam_policies:
+    deployment_policy_1:
+      {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:*",
+                        "ssm:GetParameter"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        }
+
+terraform:
+  version: 1.4.6
+  projects:
+    kick_start:
+      compliance_standard: hipaa
+      version: 1.4.6 # terraform version -> overwrites terraform.version
+      dir: infrastructure/example # execution path of terraform
+      aws_iam_role: deployment_role # linked to aws.<account-name>.iam_roles.<name>
+      tf_local_backend: false
+
+taskfile:
+  version: 2_slRyV2.ntfDSt.mVUs_OmQULPi37Bo # Take from https://github.com/biontechse/reusable-taskfile/releases
+
+cloudblock:
+  version: v0.1.0

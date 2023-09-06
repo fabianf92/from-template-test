@@ -1,0 +1,167 @@
+version: "3"
+
+dotenv: ["taskfiles/.env"]
+
+includes:
+  globalvars:
+    taskfile: taskfiles/GlobalVariablesTaskfile.yaml
+    optional: true
+  cfn:
+    taskfile: taskfiles/cloudformation/Taskfile.yaml
+    optional: true
+  lw:
+    taskfile: taskfiles/lacework/Taskfile.yaml
+    optional: true
+  tf:
+    taskfile: taskfiles/terraform/Taskfile.yaml
+    optional: true
+  aws:
+    taskfile: taskfiles/aws/Taskfile.yaml
+    optional: true
+
+output:
+  group:
+    begin: |
+
+      🔧 [TASK:] {{.TASK_NAME | default .TASK}}
+    end: ""
+
+tasks:
+  default:
+    desc: Show this help message
+    aliases:
+      - "help"
+    cmds:
+      - task --list-all
+
+  init:
+    desc: Initialize working environment by downloading reusable Taskfile
+    silent: true
+    interactive: true
+    cmds:
+      - task: global-preconds
+      - task: download-taskfiles
+
+  global-preconds:
+    desc: check if required tools are installed
+    run: once
+    internal: true
+    preconditions:
+      - sh: command -v docker 2>/dev/null
+        msg: "❌ [ERROR:] docker isn't installed. Abort"
+      - sh: command -v aws 2>/dev/null
+        msg: "❌ [ERROR:] aws-cli isn't installed. Abort"
+      - sh: "[ -f {{.USER_WORKING_DIR}}/config.yaml ]"
+        msg: "❌ [ERROR:] config.yaml doesn't exist. Abort"
+    silent: true
+    cmds:
+      - task: install-yq
+      - task: check-yq-version
+      - task: check-taskfile-version
+      - task: check-task-version
+      - task: check-aws-login
+
+  install-yq:
+    desc: install yq
+    run: once
+    silent: true
+    interactive: true
+    internal: true
+    cmds:
+      - |
+        while true; do
+            printf "⚠️ [WARNING:] yq is required to continue.\n"
+            read -p "Do you wish to download yq binary into /usr/local/bin/ via sudo (yes/no)? " yn
+            case $yn in
+                [yes]* ) break;;
+                [no]* ) echo "Abort init process." && exit 1;;
+                * ) echo "Please answer yes or no.";;
+            esac
+        done
+        sudo curl -L --silent https://github.com/mikefarah/yq/releases/latest/download/yq_{{OS}}_{{ARCH}} -o /usr/local/bin/yq
+        sudo chmod +x /usr/local/bin/yq
+      - >
+        if command -v yq >/dev/null 2>&1;
+        then printf "✅ [SUCCESS:] downloaded yq with version $(yq --version) successfully.\n";
+        else printf "❌ [ERROR:] yq download wasn't successful. Pls try again.\n";
+        fi
+    status:
+      - command -v yq >/dev/null 2>&1;
+
+  check-taskfile-version:
+    desc: check Taskfile version in config.yaml
+    run: once
+    internal: true
+    silent: true
+    cmds:
+      - |
+        if [[ "$(yq '.taskfile.version' config.yaml)" == "null" ]]; then
+          printf "❌ [ERROR:] No Taskfile version is set in the config.yaml. Abort\n"
+          exit 1
+        else
+          printf "✅ [SUCCESS:] Taskfile version is set in config.yaml.\n"
+        fi
+
+  check-yq-version:
+    desc: check yq (binary) version
+    internal: true
+    run: once
+    silent: true
+    cmds:
+      - |
+          YQ_VERSION=($(yq --version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | tr '.' ' '))
+          if [[ ${YQ_VERSION[0]} -lt 4 ]]; then
+            printf "❌ [ERROR:] Please update yq. At least the version 4.34.0 is needed. Abort."
+            exit 1
+          elif [[ ${YQ_VERSION[0]} -eq 4 ]] && [[ ${YQ_VERSION[1]} -lt 34 ]]; then
+            printf "❌ [ERROR:] Please update yq. At least the version 4.34.0 is needed. Abort."
+            exit 1
+          fi
+          printf "🔔 [INFO:] yq is already installed in version $(yq --version)\n"
+
+  check-task-version:
+    desc: check Task (binary) version
+    internal: true
+    run: once
+    silent: true
+    cmds:
+      - |
+          TASK_VERSION=($(task --version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | tr '.' ' '))
+          if [[ ${TASK_VERSION[0]} -lt 3 ]]; then
+            printf "❌ [ERROR:] Please update task. At least the version 3.25.0 is needed. Abort."
+            exit 1
+          elif [[ ${TASK_VERSION[0]} -eq 3 ]] && [[ ${TASK_VERSION[1]} -lt 25 ]]; then
+            printf "❌ [ERROR:] Please update task. At least the version 3.25.0 is needed. Abort."
+            exit 1
+          fi
+          printf "🔔 [INFO:] task is already installed in version $(task --version)\n"
+
+  check-aws-login:
+    desc: check if user is logged in to AWS account
+    internal: true
+    run: once
+    silent: true
+    cmds:
+      - |
+        LOGIN_CHECK=$(aws sts get-caller-identity --no-cli-pager | yq -p json '.UserId | test("biontech")' 2>&1 > /dev/null)
+        if [[ "$LOGIN_CHECK" != "" ]]; then
+          printf "❌ [ERROR:] You're not logged in. Abort!\n"
+          exit 1
+        else
+          printf "✅ [SUCCESS:] You are logged in to AWS BioNTechSE organization.\n"
+        fi
+
+  download-taskfiles:
+    desc: Downloading reusable Taskfile from S3 Bucket
+    internal: true
+    run: once
+    silent: true
+    cmds:
+      - defer: rm -rf taskfiles.tar.gz
+      - |
+        TASKFILE_VERSION=$(cat config.yaml | yq ".taskfile.version")
+        printf "🔔 [INFO:] Downloading version ${TASKFILE_VERSION} of reusable Taskfiles from S3\n\n"
+        aws --no-cli-pager s3api get-object --bucket reusable-taskfile --key taskfiles.tar.gz --version-id ${TASKFILE_VERSION} taskfiles.tar.gz 2>&1 > /dev/null
+        tar -xvf taskfiles.tar.gz 2>&1 > /dev/null
+        echo "CURRENT_VERSION=${TASKFILE_VERSION}" >./taskfiles/.env
+        printf "✅ [SUCCESS:] Downloaded reusable Taskfiles to {{.USER_WORKING_DIR}}/taskfiles \n\n"

@@ -1,0 +1,16 @@
+name: Terraform - Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions: write-all
+
+jobs:
+  terraform-ci:  # Check here for more inputs => https://github.com/biontechse/reusable-workflows#tf-pull-requestyaml
+    uses: biontechse/reusable-workflows/.github/workflows/tf-pull-request.yaml@v4.0.0
+    secrets: inherit
+    with:
+      tf_project: "kick_start"
+      tf_var_file: dev.tfvars

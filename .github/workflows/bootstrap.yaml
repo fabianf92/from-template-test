@@ -1,0 +1,14 @@
+name: Bootstrap TF GitHub repository
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  packages: read
+
+jobs:
+  tf_boostrap:
+    uses: biontechse/reusable-workflows/.github/workflows/tf-bootstrap-gh-repository.yaml@v4.0.0
+    secrets: inherit

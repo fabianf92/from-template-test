@@ -1,0 +1,17 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+     branches: [main]
+
+permissions: write-all
+
+jobs:
+  deploy_to_dev:
+    uses: biontechse/reusable-workflows/.github/workflows/tf-cd-single-environment.yaml@v4.0.0
+    secrets: inherit
+    with:
+      tf_project: "kick_start"
+      tf_env: "dev"
+      tf_var_file: dev.tfvars

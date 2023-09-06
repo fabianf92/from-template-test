@@ -1,0 +1,26 @@
+repos:
+  - repo: local
+    hooks:
+    - id: log in to ECR
+      name: log in to ECR
+      language: system
+      entry: |
+          bash -c "if ! grep -q 727728557704.dkr.ecr.eu-central-1.amazonaws.com ~/.docker/config.json; then \
+            aws ecr get-login-password --region eu-central-1 \
+            | docker login \
+              --username AWS \
+              --password-stdin \
+              727728557704.dkr.ecr.eu-central-1.amazonaws.com; \
+              fi"
+
+    - id: docker-gitleaks
+      name: docker-gitleaks
+      language: docker_image
+      pass_filenames: false
+      entry: -u 1000 727728557704.dkr.ecr.eu-central-1.amazonaws.com/terraform-module-checks:sha-e830643c  bash -c "gitleaks detect ."
+
+    - id: terraform-docs
+      name: terraform-docs
+      language: docker_image
+      pass_filenames: false
+      entry: -u 1000 727728557704.dkr.ecr.eu-central-1.amazonaws.com/terraform-module-checks:sha-e830643c bash -c "terraform-docs markdown ."
